@@ -1,0 +1,9 @@
+[package]
+name = "search-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+search-core.workspace = true
+serde_json.workspace = true

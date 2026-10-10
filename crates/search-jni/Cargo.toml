@@ -1,0 +1,15 @@
+[package]
+name = "search-jni"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "tg_search"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+search-core.workspace = true
+serde_json.workspace = true
+jni = "0.21"
+tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }

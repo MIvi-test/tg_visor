@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Source this file; tool homes remain inside this repository.
+TG_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export RUSTUP_HOME="$TG_PROJECT_ROOT/.tools/rustup"
+export CARGO_HOME="$TG_PROJECT_ROOT/.tools/cargo"
+export GRADLE_USER_HOME="$TG_PROJECT_ROOT/.tools/gradle-home"
+export ANDROID_USER_HOME="$TG_PROJECT_ROOT/.tools/android-user"
+export ANDROID_HOME="$TG_PROJECT_ROOT/.tools/android-sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export JAVA_HOME="$TG_PROJECT_ROOT/.tools/jdk17"
+export UV_CACHE_DIR="$TG_PROJECT_ROOT/.tools/uv-cache"
+export UV_PYTHON_INSTALL_DIR="$TG_PROJECT_ROOT/.tools/python"
+export UV_PYTHON_BIN_DIR="$TG_PROJECT_ROOT/.tools/python-bin"
+export HF_HOME="$TG_PROJECT_ROOT/.tools/huggingface"
+export PATH="$CARGO_HOME/bin:$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$TG_PROJECT_ROOT/.tools/gradle-8.11.1/bin:$PATH"

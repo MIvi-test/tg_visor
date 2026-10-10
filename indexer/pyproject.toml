@@ -1,0 +1,22 @@
+[project]
+name = "tg-indexer"
+version = "0.1.0"
+description = "Offline snapshot preparation for Telegram image search"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+runtime = ["onnxruntime==1.22.0", "tokenizers==0.21.4", "numpy==2.2.6", "Pillow==11.3.0", "telethon==1.40.0"]
+
+[project.scripts]
+tg-fixture = "tg_indexer.fixture:main"
+tg-index = "tg_indexer.pipeline:main"
+tg-collect = "tg_indexer.collect:main"
+tg-describe = "tg_indexer.describe:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tg_indexer"]

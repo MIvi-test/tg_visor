@@ -1,18 +1,30 @@
 [project]
 name = "tg-indexer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Offline snapshot preparation for Telegram image search"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-runtime = ["onnxruntime==1.22.0", "tokenizers==0.21.4", "numpy==2.2.6", "Pillow==11.3.0", "telethon==1.40.0"]
+runtime = ["onnxruntime==1.22.0", "tokenizers==0.22.2", "numpy==2.2.6", "Pillow==11.3.0", "telethon==1.40.0"]
+
+florence = ["torch==2.7.1", "torchvision==0.22.1", "transformers==4.57.6", "easyocr==1.7.2"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [project.scripts]
 tg-fixture = "tg_indexer.fixture:main"
 tg-index = "tg_indexer.pipeline:main"
 tg-collect = "tg_indexer.collect:main"
 tg-describe = "tg_indexer.describe:main"
+tg-florence-download = "tg_indexer.florence:download_main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

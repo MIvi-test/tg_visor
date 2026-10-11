@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "search-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "search-core",
  "serde_json",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "search-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "search-jni"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "jni",
  "search-core",

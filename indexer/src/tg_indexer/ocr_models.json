@@ -1,0 +1,16 @@
+[
+  {
+    "filename": "craft_mlt_25k.pth",
+    "url": "https://github.com/JaidedAI/EasyOCR/releases/download/pre-v1.1.6/craft_mlt_25k.zip",
+    "md5": "2f8227d2def4037cdb3b34389dcf9ec1",
+    "size": 83152330,
+    "sha256": "4a5efbfb48b4081100544e75e1e2b57f8de3d84f213004b14b85fd4b3748db17"
+  },
+  {
+    "filename": "cyrillic_g2.pth",
+    "url": "https://github.com/JaidedAI/EasyOCR/releases/download/v1.6.1/cyrillic_g2.zip",
+    "md5": "19f85f43d9128a89ac21b8d6a06973fe",
+    "size": 15256523,
+    "sha256": "48d0f3b58f28aa64651ab1032cc2d498c4de25135829668e87c14e7a07529f29"
+  }
+]

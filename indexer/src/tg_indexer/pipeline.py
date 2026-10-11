@@ -65,14 +65,17 @@ def export(catalog: Path, model: Path, output: Path, dataset_id: str, version: i
     records = json.loads(catalog.read_text())
     if not isinstance(records, list) or not records:
         raise ValueError("catalog must be a nonempty list")
+    from .observability import LOGGER, Progress
+    LOGGER.info("Загрузка E5 на CPU; изображений=%d", len(records))
     encoder = Encoder(model)
+    progress = Progress("Векторизация", len(records))
     output.mkdir(parents=True, exist_ok=False)
     db = sqlite3.connect(output / "metadata.sqlite")
     schema = Path(__file__).resolve().parents[3] / "contracts/schema.sql"
     db.executescript(schema.read_text())
     row = 0
     with (output / "vectors.bin").open("wb") as vectors:
-        for record in records:
+        for index, record in enumerate(records, 1):
             image_id = record["id"]
             scene = record["scene"]
             if not isinstance(scene, str) or not scene.strip():
@@ -82,12 +85,11 @@ def export(catalog: Path, model: Path, output: Path, dataset_id: str, version: i
                 source = (catalog.parent / record["thumbnail"]).resolve()
                 if not source.is_relative_to(catalog.parent.resolve()):
                     raise ValueError("thumbnail must be inside catalog directory")
-                from PIL import Image
+                from .media_image import load_image
                 (output / "thumbnails").mkdir(exist_ok=True)
                 thumbnail = "thumbnails/" + hashlib.sha256(image_id.encode()).hexdigest() + ".jpg"
-                with Image.open(source) as image:
-                    image.thumbnail((320, 320))
-                    image.convert("RGB").save(output / thumbnail, quality=75)
+                with load_image(source, max_side=320) as image:
+                    image.save(output / thumbnail, quality=75)
             db.execute("INSERT INTO images VALUES(?,?,?)", (image_id, scene, thumbnail))
             sources = record.get("sources", [])
             if not sources:
@@ -106,6 +108,7 @@ def export(catalog: Path, model: Path, output: Path, dataset_id: str, version: i
                     row += 1
             lexical = "\n".join([record.get("ocr", "")] + [s.get("caption", "") for s in sources])
             db.execute("INSERT INTO search_text VALUES(?,?)", (image_id, lexical))
+            progress.update(index, f"векторов={row}")
     db.commit()
     db.close()
     files = {}
@@ -121,6 +124,7 @@ def export(catalog: Path, model: Path, output: Path, dataset_id: str, version: i
         "vector_count": row, "image_count": len(records), "files": files,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    progress.finish(f"изображений={len(records)}, векторов={row}")
 
 
 def main() -> None:
@@ -146,6 +150,9 @@ def main() -> None:
     publish.add_argument("directory", type=Path)
     publish.add_argument("folder", type=Path)
     args = parser.parse_args()
+    from .observability import LOGGER, configure_logging
+    configure_logging()
+    LOGGER.info("Начало операции: %s", args.command)
     if args.command == "pack-model":
         (args.model / "model.json").write_text(json.dumps(model_manifest(args.model), indent=2))
         pack(args.model, args.zip)
@@ -168,6 +175,8 @@ def main() -> None:
     else:
         encoder = Encoder(args.model)
         args.output.write_text(json.dumps({"text": args.text, "vector": encoder.encode(args.text, query=True).tolist(), "embedding_space": encoder.manifest["embedding_space"], "filters": {}, "top_k": 10}, ensure_ascii=False))
+
+    LOGGER.info("Готово: %s", args.command)
 
 
 if __name__ == "__main__":

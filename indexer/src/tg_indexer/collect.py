@@ -1,12 +1,15 @@
 """Explicit, read-only Telegram collection from chats listed in a local config."""
 import argparse
 import asyncio
+from contextlib import suppress
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 
 from .pipeline import sha256
+from .observability import LOGGER, Progress, configure_logging
+from .telegram_rate import RateLimiter, client_class
 
 
 def write_json(path: Path, content) -> None:
@@ -27,12 +30,14 @@ def scope_records(records: list, chat_ids: set, from_date=None, to_date=None) ->
     return scoped
 
 
-async def collect(config_path: Path, output: Path) -> None:
-    from telethon import TelegramClient, errors, types, utils
+async def collect(config_path: Path, output: Path, *, requests_per_second=None) -> None:
+    from telethon import types, utils
     config = json.loads(config_path.read_text())
     chats = config.get("chats", [])
     if not chats:
         raise ValueError("configure an explicit nonempty chats allowlist")
+    rate = config.get("requests_per_second", 2) if requests_per_second is None else requests_per_second
+    limiter = RateLimiter(rate)
     api_id = int(os.environ["TG_API_ID"])
     api_hash = os.environ["TG_API_HASH"]
     output.mkdir(parents=True, exist_ok=True)
@@ -51,16 +56,36 @@ async def collect(config_path: Path, output: Path) -> None:
         raise ValueError("limit_per_chat must be 1..100000")
     from_date = datetime.fromisoformat(config["from_date"]).replace(tzinfo=timezone.utc) if config.get("from_date") else None
     to_date = datetime.fromisoformat(config["to_date"]).replace(tzinfo=timezone.utc) if config.get("to_date") else None
-    client = TelegramClient(str(session), api_id, api_hash, flood_sleep_threshold=60)
-    # Interactive authorization happens locally; no login values are logged or exported.
-    await client.start()
+    client = client_class()(str(session), api_id, api_hash, limiter=limiter, flood_sleep_threshold=0, receive_updates=False)
+    progress = Progress("Сбор", len(chats) * limit)
+    scanned = downloaded = skipped = 0
+    stage = "авторизация / соединение"
+
+    async def heartbeat():
+        while True:
+            await asyncio.sleep(10)
+            progress.update(details=f"{stage}; скачано={downloaded}, пропущено={skipped}, RPC={limiter.requests}", force=True)
+
+    LOGGER.info("Начало сбора: чатов=%d, лимит сообщений/чат=%d, RPC/с=%.2f", len(chats), limit, rate)
+    LOGGER.info("Подключение к Telegram; при необходимости авторизуйтесь в локальном терминале")
+    task = asyncio.create_task(heartbeat())
     try:
+        # Interactive authorization happens locally; no login values are logged or exported.
+        await client.start()
+        LOGGER.info("Авторизация успешна; в рабочем каталоге уже %d уникальных изображений", len(records))
         account = await client.get_me()
-        for chat in chats:
+        for chat_number, chat in enumerate(chats, 1):
+            stage = f"чат {chat_number}/{len(chats)}: получение истории"
+            LOGGER.info("Обработка чата %d/%d", chat_number, len(chats))
+            chat_scanned = 0
             entity = await client.get_entity(chat)
             chat_id = str(utils.get_peer_id(entity))
             requested_ids.add(chat_id)
             async for message in client.iter_messages(entity, limit=limit, offset_date=to_date):
+                scanned += 1
+                chat_scanned += 1
+                stage = f"чат {chat_number}/{len(chats)}: просмотр сообщений"
+                progress.update(scanned, f"{stage}; скачано={downloaded}, пропущено={skipped}, RPC={limiter.requests}")
                 if from_date and message.date < from_date:
                     break
                 mime = getattr(message.file, "mime_type", "") if message.file else ""
@@ -68,13 +93,18 @@ async def collect(config_path: Path, output: Path) -> None:
                     continue
                 key = f"{account.id}:{chat_id}:{message.id}"
                 if key in known:
+                    skipped += 1
                     continue
-                while True:
-                    try:
-                        filename = await client.download_media(message, file=str(media / f"pending-{message.id}"))
-                        break
-                    except errors.FloodWaitError as error:
-                        await asyncio.sleep(error.seconds)
+                stage = f"чат {chat_number}/{len(chats)}: скачивание картинки"
+
+                def download_progress(received, total):
+                    percent = int(received * 100 / total) if total else 0
+                    progress.update(details=f"{stage} {percent}%; скачано={downloaded}, RPC={limiter.requests}")
+
+                # Telethon otherwise chooses video_sizes for animated photos and saves MP4.
+                photo_sizes = getattr(message.photo, "sizes", []) if message.photo else []
+                thumb = max(photo_sizes, key=lambda size: getattr(size, "w", 0) * getattr(size, "h", 0)).type if photo_sizes else None
+                filename = await client.download_media(message, file=str(media / f"pending-{message.id}"), progress_callback=download_progress, thumb=thumb)
                 if not filename:
                     continue
                 path = Path(filename)
@@ -102,10 +132,17 @@ async def collect(config_path: Path, output: Path) -> None:
                     records.append(record)
                 images[image_id]["sources"].append(source)
                 known.add(key)
+                downloaded += 1
                 write_json(catalog_path, records)
+            LOGGER.info("Чат %d/%d завершён: просмотрено=%d", chat_number, len(chats), chat_scanned)
         scoped = scope_records(records, requested_ids, int(from_date.timestamp()) if from_date else None, int(to_date.timestamp()) if to_date else None)
         write_json(output / "selected-catalog.json", scoped)
+        progress.finish(f"просмотрено={scanned}, скачано={downloaded}, ранее сохранено={skipped}, RPC={limiter.requests}")
+        LOGGER.info("Готово: выбранных изображений=%d; записан selected-catalog.json", len(scoped))
     finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
         await client.disconnect()
         session_file = session.with_suffix(".session")
         if session_file.exists():
@@ -116,8 +153,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--requests-per-second", type=float, help="override config RPC rate (0.1..20, default 2)")
+    parser.add_argument("--log-file", type=Path, help="default: OUTPUT/collect.log; rotated at 5 MiB")
     args = parser.parse_args()
-    asyncio.run(collect(args.config, args.output))
+    configure_logging(args.log_file or args.output / "collect.log")
+    try:
+        asyncio.run(collect(args.config, args.output, requests_per_second=args.requests_per_second))
+    except KeyboardInterrupt:
+        LOGGER.warning("Сбор остановлен пользователем. Сохранённый catalog.json остаётся; повторите запуск для продолжения")
+        raise SystemExit(130) from None
+    except Exception as error:
+        LOGGER.error("Сбор завершился ошибкой (%s). Проверьте конфиг, окружение и доступ аккаунта к выбранным чатам", type(error).__name__)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

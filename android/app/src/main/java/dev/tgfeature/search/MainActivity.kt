@@ -3,7 +3,6 @@ package dev.tgfeature.search
 import android.content.Intent
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
@@ -70,7 +69,7 @@ private fun SearchScreen(model: SearchViewModel = viewModel()) {
           item {
            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Поиск картинок", style = MaterialTheme.typography.headlineSmall)
+                Text("tgVisor", style = MaterialTheme.typography.headlineSmall)
                 TextButton(onClick = { model.toggleTheme() }) { Text(if (model.darkTheme) "Светлая" else "Тёмная") }
             }
             Text("По смыслу — в вашем архиве", style = MaterialTheme.typography.bodyMedium)
@@ -138,10 +137,11 @@ private fun SearchScreen(model: SearchViewModel = viewModel()) {
                                 val link = source.optString("link").takeUnless { it.isEmpty() || it == "null" }
                                 val sender = source.optString("sender_name").takeUnless { it == "null" } ?: ""
                                 val label = "${source.getString("chat_name")} · $sender"
-                                if (link != null && (link.startsWith("https://t.me/") || link.startsWith("tg://"))) {
+                                if (link != null && TelegramMessageLink.parse(link) != null) {
                                     TextButton(onClick = {
-                                        try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
-                                        catch (_: android.content.ActivityNotFoundException) { android.widget.Toast.makeText(context, "Telegram недоступен", android.widget.Toast.LENGTH_SHORT).show() }
+                                        if (!TelegramLinkOpener.open(context, link)) {
+                                            android.widget.Toast.makeText(context, "Не удалось открыть сообщение", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
                                     }) { Text(label) }
                                 } else { Text(label, style = MaterialTheme.typography.bodySmall) }
                             }

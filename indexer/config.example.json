@@ -1,6 +1,7 @@
 {
   "chats": ["@replace_with_selected_chat"],
   "limit_per_chat": 1000,
+  "requests_per_second": 2,
   "from_date": "2025-01-01",
   "to_date": null
 }

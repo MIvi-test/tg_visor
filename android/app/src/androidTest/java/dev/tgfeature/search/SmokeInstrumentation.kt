@@ -19,7 +19,11 @@ class SmokeInstrumentation : Instrumentation() {
         val output = Bundle()
         var handle = 0L
         try {
-            check(NativeBridge.value(NativeBridge.version()) == "0.1.0")
+            check(NativeBridge.value(NativeBridge.version()) == "0.1.1")
+            val message = TelegramMessageLink.parse("https://t.me/c/1234567890/42")!!
+            check(message.appUri == "tg://privatepost?channel=1234567890&post=42")
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(message.appUri)).addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+            val linkHandlers = targetContext.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).size
             val root = File(targetContext.filesDir, "device-test")
             E5Encoder(File(root, "model")).use { encoder ->
                 val expected = JSONObject(File(root, "request.json").readText())
@@ -44,7 +48,7 @@ class SmokeInstrumentation : Instrumentation() {
                 NativeBridge.value(NativeBridge.close(handle))
                 check(!JSONObject(NativeBridge.search(handle, expected.toString())).getBoolean("ok"))
                 handle = 0L
-                output.putString("stream", "PASS: JNI, E5, semantic search, filters, close; query_ms=$elapsed; max_vector_error=$maxError\n")
+                output.putString("stream", "PASS: JNI, E5, semantic search, filters, close; tg_handlers=$linkHandlers; query_ms=$elapsed; max_vector_error=$maxError\n")
             }
             finish(Activity.RESULT_OK, output)
         } catch (error: Throwable) {
